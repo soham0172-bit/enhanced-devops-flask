@@ -1,20 +1,10 @@
-from flask import Flask, jsonify
+from app import create_app
 
-app = Flask(__name__)
+app = create_app()
 
-students = [
-    {"name":"Soham","cgpa":6.95},
-    {"name":"Rahul","cgpa":8.2},
-    {"name":"Aman","cgpa":7.5}
-]
-
-@app.route("/")
-def home():
-    return "Student Placement Tracker API"
-
-@app.route("/students")
-def get_students():
-    return jsonify(students)
-
-if __name__=="__main__":
-    app.run(debug=True)
+if __name__ == "__main__":
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        debug=True
+    )
