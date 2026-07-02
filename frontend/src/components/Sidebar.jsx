@@ -8,7 +8,6 @@ import { NavLink } from 'react-router-dom'
 const links = [
   { to: '/',          label: 'Dashboard', icon: GridIcon },
   { to: '/jobs',      label: 'Jobs',      icon: BriefcaseIcon },
-  { to: '/analytics', label: 'Analytics', icon: ChartIcon },
 ]
 
 export default function Sidebar() {
@@ -73,15 +72,6 @@ function BriefcaseIcon({ size = 16 }) {
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
       <rect x="1" y="5" width="14" height="9" rx="1.5" />
       <path d="M5 5V3.5A1.5 1.5 0 0 1 6.5 2h3A1.5 1.5 0 0 1 11 3.5V5" />
-    </svg>
-  )
-}
-
-function ChartIcon({ size = 16 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <polyline points="1,12 5,7 9,9 15,3" />
-      <line x1="1" y1="15" x2="15" y2="15" />
     </svg>
   )
 }

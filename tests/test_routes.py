@@ -14,6 +14,24 @@ def test_health(client):
     assert resp.get_json()["status"] == "ok"
 
 
+def test_root_api_metadata(client):
+    resp = client.get("/")
+    assert resp.status_code == 200
+    assert resp.get_json()["status"] == "ok"
+
+
+def test_cors_allows_local_frontend(client):
+    resp = client.options(
+        "/jobs",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.headers["Access-Control-Allow-Origin"] == "http://localhost:3000"
+
+
 # ─── POST /jobs ───────────────────────────────────────────────────────────────
 
 def test_add_job_success(client):
@@ -32,6 +50,17 @@ def test_add_job_missing_fields(client):
     resp = client.post("/jobs", json={"company": "TechCorp"})
     assert resp.status_code == 422
     assert "Missing required fields" in resp.get_json()["error"]
+
+
+def test_add_job_invalid_status(client):
+    resp = client.post("/jobs", json={
+        "company": "TechCorp",
+        "role": "DevOps Intern",
+        "job_description": "Docker, GitHub Actions, Linux required.",
+        "status": "unknown",
+    })
+    assert resp.status_code == 400
+    assert "allowed_statuses" in resp.get_json()
 
 
 def test_add_job_no_body(client):

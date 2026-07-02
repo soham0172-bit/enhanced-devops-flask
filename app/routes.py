@@ -14,6 +14,18 @@ CLAUDE_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ALLOWED_STATUSES = {"applied", "interview", "offer", "rejected", "saved"}
 
 
+def allowed_statuses():
+    return sorted(ALLOWED_STATUSES)
+
+
+def clean_text(value):
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return value
+    return value.strip()
+
+
 # ─── Health check ────────────────────────────────────────────────────────────
 # GitHub Actions calls this after deploy to confirm the app is alive
 
@@ -32,7 +44,7 @@ def list_jobs():
     query = Job.query
     if status_filter:
         if status_filter not in ALLOWED_STATUSES:
-            return jsonify({"error": f"Invalid status. Choose from: {ALLOWED_STATUSES}"}), 400
+            return jsonify({"error": "Invalid status", "allowed_statuses": allowed_statuses()}), 400
         query = query.filter_by(status=status_filter)
 
     jobs = query.order_by(Job.created_at.desc()).all()
@@ -49,17 +61,21 @@ def add_job():
         return jsonify({"error": "Request body must be JSON"}), 400
 
     required = ["company", "role", "job_description"]
-    missing = [f for f in required if not data.get(f)]
+    missing = [f for f in required if not clean_text(data.get(f))]
     if missing:
         return jsonify({"error": f"Missing required fields: {missing}"}), 422
 
+    status = clean_text(data.get("status")) or "applied"
+    if status not in ALLOWED_STATUSES:
+        return jsonify({"error": "Invalid status", "allowed_statuses": allowed_statuses()}), 400
+
     job = Job(
-        company=data["company"],
-        role=data["role"],
-        job_description=data["job_description"],
-        url=data.get("url"),
-        location=data.get("location", "Remote"),
-        status=data.get("status", "applied"),
+        company=clean_text(data["company"]),
+        role=clean_text(data["role"]),
+        job_description=clean_text(data["job_description"]),
+        url=clean_text(data.get("url")),
+        location=clean_text(data.get("location")) or "Remote",
+        status=status,
     )
     db.session.add(job)
     db.session.commit()
@@ -89,12 +105,17 @@ def update_job(job_id):
     data = request.get_json(silent=True) or {}
     if "status" in data:
         if data["status"] not in ALLOWED_STATUSES:
-            return jsonify({"error": f"Invalid status. Choose from: {ALLOWED_STATUSES}"}), 400
+            return jsonify({"error": "Invalid status", "allowed_statuses": allowed_statuses()}), 400
         job.status = data["status"]
 
-    for field in ["company", "role", "url", "location"]:
+    for field in ["company", "role", "url", "location", "job_description"]:
         if field in data:
-            setattr(job, field, data[field])
+            value = clean_text(data[field])
+            if field in {"company", "role", "job_description"} and not value:
+                return jsonify({"error": f"{field} cannot be empty"}), 422
+            if field == "location" and not value:
+                value = "Remote"
+            setattr(job, field, value)
 
     db.session.commit()
     return jsonify({"message": "Job updated", "job": job.to_dict()}), 200
@@ -165,21 +186,28 @@ Respond ONLY with a valid JSON object like this (no markdown, no explanation out
     except requests.exceptions.RequestException as e:
         return jsonify({"error": f"Claude API call failed: {str(e)}"}), 502
 
-    raw_text = response.json()["content"][0]["text"]
+    try:
+        raw_text = response.json()["content"][0]["text"]
+    except (KeyError, IndexError, TypeError):
+        return jsonify({"error": "Claude returned an unexpected response shape"}), 502
 
     try:
         result = json.loads(raw_text)
     except json.JSONDecodeError:
         return jsonify({"error": "Claude returned invalid JSON", "raw": raw_text}), 502
 
-    job.ai_score = result.get("score")
+    score = result.get("score")
+    if not isinstance(score, int) or score < 0 or score > 100:
+        return jsonify({"error": "Claude returned an invalid score", "raw": result}), 502
+
+    job.ai_score = score
     job.ai_feedback = json.dumps(result)
     db.session.commit()
 
     return jsonify({
         "message": "Score saved",
         "job_id": job_id,
-        "score": result.get("score"),
+        "score": score,
         "strengths": result.get("strengths"),
         "gaps": result.get("gaps"),
         "summary": result.get("summary"),
